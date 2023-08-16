@@ -2,11 +2,11 @@
 
 #include "platform.h"
 #include "tick.hpp"
-#include "uart_impl.hpp"
+#include "uart.hpp"
 
-static UartDmaTransmitter *log_uart = nullptr;
+static UartTransmitter *log_uart = nullptr;
 
-void log_init(UartDmaTransmitter *_uart) {
+void log_init(UartTransmitter *_uart) {
   log_uart = _uart;
   log_uart->init();
 }

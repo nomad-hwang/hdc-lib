@@ -1,70 +1,71 @@
-
 #pragma once
 
 #include "platform.h"
 #include <functional>
 
-/// @brief UART Transmitter base class
-/// @tparam T derived class
-template <typename T> class UartTransmitter {
+#include "lut.hpp"
+#include "lwrb.h"
+
+/// @brief UART Transmitter class using DMA or IT
+class UartTransmitter {
 public:
-  UartTransmitter(UART_HandleTypeDef *huart) : m_huart(huart) { assert(m_huart != nullptr); }
+  enum Mode { DMA, IT };
 
-  /// @brief Initialize UART
-  /// @return 0 if success
-  /// @note This is must be called before using UART since the value assigned at startup is cleared by HAL_MspInit()
-  int init() { return static_cast<T *>(this)->init(); }
+  UartTransmitter(UART_HandleTypeDef *huart, enum Mode mode) : m_huart(huart), m_mode(mode) { m_ref.insert(m_huart, this); }
 
-  /// @brief Write data to UART
-  /// @param data: data to be written
-  /// @param size: data size
-  /// @param timeout: timeout in ms
-  /// @return size of data written
-  inline size_t write(const uint8_t *data, size_t size, uint32_t timeout = 1000) {
-    assert(timeout > 0);
-    assert(data != nullptr);
-    assert(size > 0 && size <= UART_TX_BUFFER_SIZE);
+  int init();
+  size_t write(const uint8_t *data, size_t size);
 
-    return static_cast<T *>(this)->write(data, size, timeout);
-  }
+private:
+  void handle_tx_cplt(UART_HandleTypeDef *huart);
+  void handle_error(UART_HandleTypeDef *huart);
 
-protected:
+  inline static LookupTable<UART_HandleTypeDef *, UartTransmitter *, UART_MAX_INSTANCES> m_ref;
+
+  HAL_StatusTypeDef (*m_transmit)(UART_HandleTypeDef *huart, const uint8_t *pData, uint16_t Size);
   UART_HandleTypeDef *m_huart;
+
+  lwrb_t m_rb;
+  uint8_t m_rb_buffer[UART_TX_BUFFER_SIZE] = {0};
+  uint8_t m_tx_buffer[UART_TX_BUFFER_SIZE] = {0};
+
+  enum Mode m_mode;
+  bool m_tx_running = false;
+  bool m_initialized = false;
 };
 
-/// @brief UART Receiver base class
-/// @tparam T derived class
-template <typename T> class UartReceiver {
+/// @brief UART Receiver class using DMA or IT
+class UartReceiver {
 public:
-  UartReceiver(UART_HandleTypeDef *huart) : m_huart(huart) { assert(m_huart != nullptr); }
+  enum Mode { DMA, IT };
 
-  /// @brief Initialize UART
-  /// @return 0 if success
-  /// @note This is must be called before using UART since the value assigned at startup is cleared by HAL_MspInit()
-  int init() { return static_cast<T *>(this)->init(); }
+  UartReceiver(UART_HandleTypeDef *huart, enum Mode mode) : m_huart(huart), m_mode(mode) { m_ref.insert(m_huart, this); }
 
-  /// @brief Read data from UART
-  /// @param data: data buffer
-  /// @param size: data size
-  /// @param timeout: timeout in ms
-  /// @return size of data read
-  inline size_t read(uint8_t *data, size_t size, uint32_t timeout = 1000) {
-    assert(timeout > 0);
-    assert(data != nullptr);
-    assert(size > 0 && size <= UART_RX_BUFFER_SIZE);
+  int init();
+  int read();
+  int read(uint8_t *data, size_t size);
 
-    return static_cast<T *>(this)->read(data, size, timeout);
-  }
+  int available() { return lwrb_get_full(&m_rb); }
+  void flush() { lwrb_reset(&m_rb); }
 
-  /// @brief Length of data available in RX buffer
-  /// @return length of data available
-  inline size_t available() { return static_cast<T *>(this)->available(); }
-
-  /// @brief Set callback function to be called when data is received(idle line detected)
-  /// @param callback: callback function
   void set_callback(std::function<void(void *)> callback) { m_callback = callback; }
 
-protected:
+private:
+  inline static LookupTable<UART_HandleTypeDef *, UartReceiver *, UART_MAX_INSTANCES> m_ref;
+
   UART_HandleTypeDef *m_huart;
   std::function<void(void *)> m_callback;
+
+  enum Mode m_mode;
+  bool m_initialized = false;
+
+  uint16_t m_old_pos = 0;
+  uint8_t m_rx_buffer[UART_RX_BUFFER_SIZE] = {0};
+
+  lwrb_t m_rb;
+  uint8_t m_rb_buffer[UART_RX_BUFFER_SIZE] = {0};
+
+  void handle_rx_event_dma(UART_HandleTypeDef *);
+  void handle_rx_event_it(UART_HandleTypeDef *, uint16_t);
+  void handle_error(UART_HandleTypeDef *huart);
 };
