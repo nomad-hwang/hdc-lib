@@ -46,9 +46,10 @@ Set to 1 to enable debugging features within class:
 
 /* _____STANDARD INCLUDES____________________________________________________ */
 // include types & constants of Wiring core API
-#include "platform.h"
-#include "uart.hpp"
 
+#include "platform.h"
+#include "tick.hpp"
+#include "uart.hpp"
 /* _____UTILITY MACROS_______________________________________________________ */
 // functions to calculate Modbus Application Data Unit CRC
 static uint16_t crc16_update(uint16_t crc, uint8_t a) {
@@ -72,6 +73,11 @@ static uint16_t crc16_update(uint16_t crc, uint8_t a) {
 inline uint16_t word(uint8_t x) { return x; }
 inline uint16_t word(uint8_t h, uint8_t l) { return (h << 8) | l; }
 
+// bitWrite(_u16TransmitBuffer[_u8TransmitBufferIndex], txBitIndex, data);
+#define bitWrite(value, bit, bitvalue) ((bitvalue) ? bitSet(value, bit) : bitClear(value, bit))
+#define bitRead(value, bit) (((value) >> (bit)) & 0x01)
+#define bitSet(value, bit) ((value) |= (1UL << (bit)))
+#define bitClear(value, bit) ((value) &= ~(1UL << (bit)))
 /* _____PROJECT INCLUDES_____________________________________________________ */
 
 /* _____CLASS DEFINITIONS____________________________________________________ */
@@ -83,7 +89,7 @@ class ModbusMaster {
 public:
   ModbusMaster();
 
-  void begin(uint8_t, Stream &serial);
+  void begin(uint8_t, UartTransmitter *, UartReceiver *);
   void idle(void (*)());
   void preTransmission(void (*)());
   void postTransmission(void (*)());
@@ -206,7 +212,7 @@ public:
   void clearTransmitBuffer();
 
   void beginTransmission(uint16_t);
-  uint8_t requestFrom(uint16_t, uint16_t);
+  // uint8_t requestFrom(uint16_t, uint16_t);
   void sendBit(bool);
   void send(uint8_t);
   void send(uint16_t);
@@ -216,10 +222,18 @@ public:
 
   uint8_t readCoils(uint16_t, uint16_t);
   uint8_t readDiscreteInputs(uint16_t, uint16_t);
+
   uint8_t readHoldingRegisters(uint16_t, uint16_t);
-  uint8_t readInputRegisters(uint16_t, uint8_t);
+  uint8_t readHoldingRegisters(uint8_t, uint16_t, uint16_t);
+
+  uint8_t readInputRegisters(uint16_t, uint8_t);          // read address, read qty
+  uint8_t readInputRegisters(uint8_t, uint16_t, uint8_t); // slave address, read address, read qty
+
   uint8_t writeSingleCoil(uint16_t, uint8_t);
+
   uint8_t writeSingleRegister(uint16_t, uint16_t);
+  uint8_t writeSingleRegister(uint8_t, uint16_t, uint16_t);
+
   uint8_t writeMultipleCoils(uint16_t, uint16_t);
   uint8_t writeMultipleCoils();
   uint8_t writeMultipleRegisters(uint16_t, uint16_t);
@@ -229,7 +243,11 @@ public:
   uint8_t readWriteMultipleRegisters(uint16_t, uint16_t);
 
 private:
-  Stream *_serial;                               ///< reference to serial port object
+  // Stream *_serial;                               ///< reference to serial port object
+  UartTransmitter *_serial_tx;
+  UartReceiver *_serial_rx;
+  bool _initialised; ///< Initialised flag
+
   uint8_t _u8MBSlave;                            ///< Modbus slave (1..255) initialized in begin()
   static const uint8_t ku8MaxBufferSize = 64;    ///< size of response/transmit buffers
   uint16_t _u16ReadAddress;                      ///< slave register from which to read
@@ -260,7 +278,7 @@ private:
   static const uint8_t ku8MBReadWriteMultipleRegisters = 0x17; ///< Modbus function 0x17 Read Write Multiple Registers
 
   // Modbus timeout [milliseconds]
-  static const uint16_t ku16MBResponseTimeout = 2000; ///< Modbus timeout [milliseconds]
+  static const uint16_t ku16MBResponseTimeout = 100; ///< Modbus timeout [milliseconds]
 
   // master function that conducts Modbus transactions
   uint8_t ModbusMasterTransaction(uint8_t u8MBFunction);

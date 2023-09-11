@@ -1,12 +1,12 @@
 #include "uart.hpp"
 
-int UartReceiver::init() {
+Error UartReceiver::init() {
   lwrb_init(&m_rb, m_rb_buffer, UART_RX_BUFFER_SIZE);
 
   HAL_UART_RegisterCallback(m_huart, HAL_UART_ERROR_CB_ID, [](UART_HandleTypeDef *huart) { m_ref.get(huart)->handle_error(huart); });
 
   if (m_mode == DMA) {
-    HAL_UART_RegisterRxEventCallback(m_huart, [](UART_HandleTypeDef *huart, uint16_t Pos) { m_ref.get(huart)->handle_rx_event_dma(huart); });
+    HAL_UART_RegisterRxEventCallback(m_huart, [](UART_HandleTypeDef *huart, uint16_t Pos) { m_ref.get(huart)->handle_rx_event_dma(huart, Pos); });
     HAL_UARTEx_ReceiveToIdle_DMA(m_huart, m_rx_buffer, UART_RX_BUFFER_SIZE);
   } else {
     HAL_UART_RegisterRxEventCallback(m_huart, [](UART_HandleTypeDef *huart, uint16_t Pos) { m_ref.get(huart)->handle_rx_event_it(huart, Pos); });
@@ -15,7 +15,7 @@ int UartReceiver::init() {
 
   m_initialized = true;
 
-  return 0;
+  return Error::OK;
 }
 
 int UartReceiver::read() {
@@ -31,8 +31,8 @@ int UartReceiver::read(uint8_t *data, size_t size) {
   return lwrb_read(&m_rb, data, size);
 }
 
-void UartReceiver::handle_rx_event_dma(UART_HandleTypeDef *_) {
-  uint16_t pos = UART_RX_BUFFER_SIZE - __HAL_DMA_GET_COUNTER(m_huart->hdmarx);
+void UartReceiver::handle_rx_event_dma(UART_HandleTypeDef *_, uint16_t pos) {
+  // uint16_t pos = UART_RX_BUFFER_SIZE - __HAL_DMA_GET_COUNTER(m_huart->hdmarx);
 
   if (pos == m_old_pos) {
     return;
@@ -50,6 +50,10 @@ void UartReceiver::handle_rx_event_dma(UART_HandleTypeDef *_) {
   if (m_callback) {
     m_callback(this);
   }
+
+  if (m_task_handle) {
+    vTaskNotifyGiveFromISR(m_task_handle, NULL);
+  }
 }
 
 void UartReceiver::handle_rx_event_it(UART_HandleTypeDef *_, uint16_t Pos) {
@@ -58,6 +62,10 @@ void UartReceiver::handle_rx_event_it(UART_HandleTypeDef *_, uint16_t Pos) {
 
   if (m_callback) {
     m_callback(this);
+  }
+
+  if (m_task_handle) {
+    vTaskNotifyGiveFromISR(m_task_handle, NULL);
   }
 }
 
