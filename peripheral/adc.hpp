@@ -13,7 +13,7 @@ public:
   int stop() { return HAL_ADC_Stop_DMA(m_hadc) == HAL_OK ? 0 : -1; }
 
   uint16_t get(uint32_t channel) { return m_adc_value[channel]; }
-  float get_voltage(uint32_t channel, float vref = 3.3f) { return m_adc_value[channel] * vref / 4096.0f; }
+  float get_voltage(uint32_t channel, float vref = 3.3f) { return m_adc_value[channel] * vref / 4095.0f; }
 
   ADC_HandleTypeDef *m_hadc;
 

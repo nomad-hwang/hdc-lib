@@ -101,7 +101,17 @@ size_t UartTransmitter::write(const uint8_t *data, size_t size) {
   if (m_tx_running) {
     size_t written = lwrb_write(&m_rb, data, size);
     __enable_irq();
-    return written;
+
+    if (written != size) {
+      while (m_tx_running) {
+        vTaskDelay(1);
+      }
+
+      data += written;
+      size -= written;
+    } else {
+      return size;
+    }
   }
 
   m_tx_running = true;
