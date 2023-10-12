@@ -17,8 +17,8 @@ public:
   float get() { return m_prev_data; }
 
 private:
-  float m_ts;
   float m_cut_off_frequency;
+  float m_ts;
   float m_tau;
 
   float m_prev_data = 0.0f;
